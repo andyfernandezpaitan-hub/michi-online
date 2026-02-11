@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Juego de Michi Online</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    background-image: url('fondo.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    margin: 0;
+    padding: 20px;
+}
+.board {
+    display: grid;
+    grid-template-columns: repeat(3, 30vw);
+    grid-template-rows: repeat(3, 30vw);
+    gap: 2vw;
+    margin: 5vw auto;
+    max-width: 310px;
+}
+.cell {
+    background-color: rgba(255,255,255,0.5);
+    border: 2px solid #333;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10vw;
+    cursor: pointer;
+    transition: transform 0.2s ease, background-color 0.2s ease;
+}
+.cell.pop { transform: scale(1.3); }
+#status { font-size: 22px; margin: 10px 0; }
+#scoreboard { font-size: 18px; margin: 10px 0; }
+button, select, input { padding: 10px 20px; font-size: 16px; margin: 5px; }
+@media (min-width: 500px) {
+    .board { grid-template-columns: repeat(3, 100px); grid-template-rows: repeat(3, 100px); }
+    .cell { font-size: 48px; }
+}
+</style>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+
+<body>
+
+<h1>Juego de Michi</h1>
+<div id="status">Selecciona un modo para empezar</div>
+<div id="scoreboard">X: 0 | O: 0 | Empates: 0</div>
+
+<button id="vs-machine">Vs Máquina</button>
+<button id="vs-friend">Vs Amigo</button>
+<button id="vs-online">Online</button>
+
+<br>
+<input id="roomCode" placeholder="Código sala">
+<button id="createRoom">Crear</button>
+<button id="joinRoom">Unirse</button>
+<button id="copyCode">Copiar código</button>
+
+<select id="difficulty" style="display:none;">
+  <option value="easy">Fácil</option>
+  <option value="normal">Normal</option>
+  <option value="hard">Extremo</option>
+</select>
+
+<div class="board">
+  <div class="cell" data-index="0"></div>
+  <div class="cell" data-index="1"></div>
+  <div class="cell" data-index="2"></div>
+  <div class="cell" data-index="3"></div>
+  <div class="cell" data-index="4"></div>
+  <div class="cell" data-index="5"></div>
+  <div class="cell" data-index="6"></div>
+  <div class="cell" data-index="7"></div>
+  <div class="cell" data-index="8"></div>
+</div>
+
+<button id="reset">Reiniciar</button>
+
+<script>
+/* 🔥 FIREBASE CONFIG */
+firebase.initializeApp({
+  apiKey: "AIzaSyCcqQn4nRLhD9myvH6cnles2oW0CTwB_vM",
+  authDomain: "michi-online.firebaseapp.com",
+  databaseURL: "https://michi-online-default-rtdb.firebaseio.com",
+  projectId: "michi-online"
+});
+const db = firebase.database();
+
+/* 🔊 SONIDOS */
+const soundX = new Audio("sonidos/jugadaX.mp3");
+const soundO = new Audio("sonidos/jugadaO.mp3");
+const soundWin = new Audio("sonidos/ganar.mp3");
+const soundTie = new Audio("sonidos/empate.mp3");
+
+/* VARIABLES */
+const cells = document.querySelectorAll('.cell');
+const status = document.getElementById('status');
+const scoreboard = document.getElementById('scoreboard');
+const resetBtn = document.getElementById('reset');
+const vsMachineBtn = document.getElementById('vs-machine');
+const vsFriendBtn = document.getElementById('vs-friend');
+const vsOnlineBtn = document.getElementById('vs-online');
+const difficultySelect = document.getElementById('difficulty');
+const createRoom = document.getElementById('createRoom');
+const joinRoom = document.getElementById('joinRoom');
+const roomCode = document.getElementById('roomCode');
+const copyCodeBtn = document.getElementById('copyCode');
+
+let board = Array(9).fill('');
+let currentPlayer = 'X';
+let gameActive = false;
+let vsMachine = false;
+let online = false;
+let room = null;
+let mySymbol = null;
+
+/* Marcador */
+let scoreX = 0, scoreO = 0, scoreTie = 0;
+function updateScore(){ scoreboard.textContent = `X: ${scoreX} | O: ${scoreO} | Empates: ${scoreTie}`; }
+
+/* GANADOR */
+function checkWinner(b){
+  const w=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  for(const [a,b1,c] of w){
+    if(b[a] && b[a]===b[b1] && b[a]===b[c]) return b[a];
+  }
+  return b.includes('')?null:'tie';
+}
+
+/* JUGADA */
+function playMove(i,p){
+  board[i]=p;
+  const cell = cells[i];
+  cell.textContent=p;
+  cell.classList.add('pop');
+  setTimeout(()=>cell.classList.remove('pop'),200);
+  const audio = (p==='X'?soundX:soundO);
+  audio.currentTime = 0; audio.play();
+
+  const r = checkWinner(board);
+  if(r){
+    gameActive=false;
+    const audioEnd = (r==='tie'?soundTie:soundWin);
+    audioEnd.currentTime=0; audioEnd.play();
+    status.textContent = r==='tie'?'Empate':'Gana '+r;
+
+    if(r==='X') scoreX++; else if(r==='O') scoreO++; else scoreTie++;
+    updateScore();
+
+    if(online) db.ref('rooms/'+room+'/winner').set(r);
+  } else {
+    currentPlayer = p==='X'?'O':'X';
+    status.textContent='Turno '+currentPlayer;
+    if(online) db.ref('rooms/'+room+'/currentPlayer').set(currentPlayer);
+  }
+
+  if(vsMachine && gameActive) aiMove();
+}
+
+/* CLICK CELLS */
+cells.forEach(c=>{
+  c.onclick = e=>{
+    if(!gameActive) return;
+    if(online && currentPlayer!==mySymbol) return;
+    const i = e.target.dataset.index;
+    if(board[i]) return;
+    playMove(i,currentPlayer);
+  }
+});
+
+/* ===== IA ===== */
+function aiMove(){
+  if(!vsMachine || currentPlayer!=='O' || !gameActive) return;
+  let move;
+  const level = difficultySelect.value;
+  if(level==='easy') move=randomMove();
+  else if(level==='normal') move = Math.random()<0.6?bestMove():randomMove();
+  else move = bestMove();
+  setTimeout(()=>playMove(move,'O'),400);
+}
+function randomMove(){ const e=board.map((v,i)=>v===''?i:null).filter(v=>v!==null); return e[Math.floor(Math.random()*e.length)]; }
+function bestMove(){
+  let best=-Infinity,m;
+  for(let i=0;i<9;i++){ if(board[i]===''){ board[i]='O'; let s=minimax(board,0,false); board[i]=''; if(s>best){best=s; m=i;} } }
+  return m;
+}
+function minimax(b,d,isMax){
+  const r = checkWinner(b);
+  if(r==='O') return 10-d; if(r==='X') return d-10; if(r==='tie') return 0;
+  if(isMax){ let best=-Infinity; for(let i=0;i<9;i++){ if(b[i]===''){b[i]='O'; best=Math.max(best,minimax(b,d+1,false)); b[i]='';} } return best; }
+  else{ let best=Infinity; for(let i=0;i<9;i++){ if(b[i]===''){b[i]='X'; best=Math.min(best,minimax(b,d+1,true)); b[i]='';} } return best; }
+}
+
+/* ===== ONLINE ===== */
+function code(){ return Math.random().toString(36).substr(2,4).toUpperCase(); }
+
+vsOnlineBtn.onclick = ()=>{
+  resetGame();
+  online = true;
+  gameActive = true;
+  status.textContent = 'Online: crea o únete';
+};
+
+/* CREAR SALA */
+createRoom.onclick = ()=>{
+  room = code();
+  mySymbol = 'X';
+  db.ref('rooms/'+room).set({board,currentPlayer:'X',winner:null,players:{X:true}});
+  listen();
+  status.textContent = 'Sala ' + room + ' (X)';
+  roomCode.value = room;
+};
+
+/* UNIRSE SALA */
+joinRoom.onclick = ()=>{
+  room = roomCode.value.trim().toUpperCase();
+  if(!room) return alert('Código inválido');
+  mySymbol = 'O';
+  db.ref('rooms/'+room+'/players/O').set(true); // marca que O está conectado
+  listen();
+  status.textContent = 'Unido a ' + room + ' (O)';
+};
+
+/* COPIAR CÓDIGO */
+copyCodeBtn.onclick = ()=>{
+  if(!room) return alert('No hay sala activa');
+  navigator.clipboard.writeText(room).then(()=>alert('Código copiado: '+room));
+};
+
+/* ESCUCHAR CAMBIOS EN FIREBASE */
+function listen(){
+  db.ref('rooms/'+room).on('value',snap=>{
+    if(!snap.val()) return;
+    board = snap.val().board;
+    currentPlayer = snap.val().currentPlayer;
+    const winner = snap.val().winner || null;
+    cells.forEach((c,i)=>c.textContent = board[i]);
+    if(winner) gameActive=false;
+    status.textContent = winner ? (winner==='tie'?'Empate':'Gana '+winner) : 
+      (currentPlayer===mySymbol?'Tu turno':'Esperando al otro jugador...');
+  });
+}
+
+/* CONTROLES */
+vsMachineBtn.onclick = ()=>{
+  resetGame();
+  vsMachine = true;
+  gameActive = true;
+  difficultySelect.style.display='inline';
+  status.textContent='Turno X';
+};
+vsFriendBtn.onclick = ()=>{ resetGame(); gameActive=true; status.textContent='Turno X'; };
+resetBtn.onclick = resetGame;
+
+function resetGame(){
+  board.fill('');
+  cells.forEach(c=>c.textContent='');
+  gameActive=false;
+  vsMachine=false;
+  online=false;
+  room=null;
+  mySymbol=null;
+  difficultySelect.style.display='none';
+  status.textContent='Selecciona modo';
+}
+</script>
+
+</body>
+</html>
