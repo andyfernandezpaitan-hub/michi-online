@@ -329,6 +329,12 @@ function listen(){
   db.ref('rooms/'+room).on('value', snap => {
     if(!snap.val()) return;
     const data = snap.val();
+    // Verificar si el jugador está confirmado en la sala
+    if (!data.players || !data.players[mySymbol]) {
+      status.textContent = 'Esperando confirmación...';
+      gameActive = false;
+      return;
+    }
     board = data.board || Array(9).fill('');
     currentPlayer = data.currentPlayer || 'X';
     const winner = data.winner;
@@ -341,6 +347,7 @@ function listen(){
       return;
     }
 
+    gameActive = true;  // Activar juego solo si estoy en la sala y no hay ganador
     if(currentPlayer===mySymbol){
       status.textContent='Tu turno';
     } else {
