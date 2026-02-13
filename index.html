@@ -97,9 +97,9 @@ button, select, input {
 <button id="reset">Reiniciar</button>
 
 <script>
-/* FIREBASE */
+/* FIREBASE - Reemplaza con tu API key real */
 firebase.initializeApp({
-  apiKey: "TU_API_KEY",
+  apiKey: "TU_API_KEY",  // Cambia esto por tu clave real
   authDomain: "michi-online.firebaseapp.com",
   databaseURL: "https://michi-online-default-rtdb.firebaseio.com",
   projectId: "michi-online"
@@ -287,11 +287,12 @@ vsOnlineBtn.onclick = ()=>{
 createRoom.onclick = ()=>{
   room = code();
   mySymbol='X';
+  const firstPlayer = Math.random() < 0.5 ? 'X' : 'O';  // Turno aleatorio
   db.ref('rooms/'+room).set({
     board: board,
-    currentPlayer:'X',
-    winner:null,
-    players:{X:true}
+    currentPlayer: firstPlayer,
+    winner: null,
+    players: {X: true}
   });
   listen();
   status.textContent='Sala '+room+' (X)';
@@ -302,7 +303,12 @@ joinRoom.onclick = ()=>{
   room = roomCode.value.trim().toUpperCase();
   if(!room) return alert('Código inválido');
   mySymbol='O';
-  db.ref('rooms/'+room+'/players/O').set(true);
+  db.ref('rooms/'+room).once('value', snap => {
+    if(!snap.val()) return alert('Sala no existe');
+    const data = snap.val();
+    if(data.players && data.players.O) return alert('Sala llena');
+    db.ref('rooms/'+room+'/players/O').set(true);
+  });
   listen();
   status.textContent='Unido a '+room+' (O)';
 };
@@ -313,12 +319,12 @@ copyCodeBtn.onclick = ()=>{
 };
 
 function listen(){
-  db.ref('rooms/'+room).on('value',snap=>{
+  db.ref('rooms/'+room).on('value', snap => {
     if(!snap.val()) return;
-
-    board = snap.val().board;
-    currentPlayer = snap.val().currentPlayer;
-    const winner = snap.val().winner;
+    const data = snap.val();
+    board = data.board || Array(9).fill('');
+    currentPlayer = data.currentPlayer || 'X';
+    const winner = data.winner;
 
     cells.forEach((c,i)=>c.textContent=board[i]);
 
@@ -351,7 +357,16 @@ vsFriendBtn.onclick = ()=>{
   status.textContent='Turno X';
 };
 
-resetBtn.onclick = resetGame;
+resetBtn.onclick = ()=>{
+  resetGame();
+  if(online && room){
+    db.ref('rooms/'+room).update({
+      board: board,
+      currentPlayer: 'X',
+      winner: null
+    });
+  }
+};
 
 function resetGame(){
   board.fill('');
@@ -363,6 +378,7 @@ function resetGame(){
   mySymbol=null;
   difficultySelect.style.display='none';
   status.textContent='Selecciona modo';
+  // No resetea el marcador global, solo el tablero
 }
 </script>
 
