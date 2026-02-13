@@ -329,9 +329,10 @@ function listen(){
   db.ref('rooms/'+room).on('value', snap => {
     if(!snap.val()) return;
     const data = snap.val();
-    // Verificar si el jugador está confirmado en la sala
-    if (!data.players || !data.players[mySymbol]) {
-      status.textContent = 'Esperando confirmación...';
+    console.log('Datos de Firebase:', data);  // Log para debug
+    // Verificar si ambos jugadores están presentes
+    if (!data.players || !data.players.X || !data.players.O) {
+      status.textContent = 'Esperando al otro jugador...';
       gameActive = false;
       return;
     }
@@ -347,7 +348,7 @@ function listen(){
       return;
     }
 
-    gameActive = true;  // Activar juego solo si estoy en la sala y no hay ganador
+    gameActive = true;  // Activar solo si ambos están conectados
     if(currentPlayer===mySymbol){
       status.textContent='Tu turno';
     } else {
