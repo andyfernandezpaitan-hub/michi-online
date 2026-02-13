@@ -32,14 +32,24 @@ body {
     justify-content: center;
     font-size: 10vw;
     cursor: pointer;
-    transition: transform 0.2s ease, background-color 0.2s ease;
+    transition: transform 0.2s ease;
 }
-.cell.pop { transform: scale(1.3); }
+.cell.pop { transform: scale(1.2); }
+
 #status { font-size: 22px; margin: 10px 0; }
 #scoreboard { font-size: 18px; margin: 10px 0; }
-button, select, input { padding: 10px 20px; font-size: 16px; margin: 5px; }
+
+button, select, input {
+    padding: 10px 20px;
+    font-size: 16px;
+    margin: 5px;
+}
+
 @media (min-width: 500px) {
-    .board { grid-template-columns: repeat(3, 100px); grid-template-rows: repeat(3, 100px); }
+    .board {
+        grid-template-columns: repeat(3, 100px);
+        grid-template-rows: repeat(3, 100px);
+    }
     .cell { font-size: 48px; }
 }
 </style>
@@ -51,6 +61,7 @@ button, select, input { padding: 10px 20px; font-size: 16px; margin: 5px; }
 <body>
 
 <h1>Juego de Michi</h1>
+
 <div id="status">Selecciona un modo para empezar</div>
 <div id="scoreboard">X: 0 | O: 0 | Empates: 0</div>
 
@@ -59,6 +70,7 @@ button, select, input { padding: 10px 20px; font-size: 16px; margin: 5px; }
 <button id="vs-online">Online</button>
 
 <br>
+
 <input id="roomCode" placeholder="Código sala">
 <button id="createRoom">Crear</button>
 <button id="joinRoom">Unirse</button>
@@ -85,22 +97,22 @@ button, select, input { padding: 10px 20px; font-size: 16px; margin: 5px; }
 <button id="reset">Reiniciar</button>
 
 <script>
-/* 🔥 FIREBASE CONFIG */
+/* FIREBASE */
 firebase.initializeApp({
-  apiKey: "AIzaSyCcqQn4nRLhD9myvH6cnles2oW0CTwB_vM",
+  apiKey: "TU_API_KEY",
   authDomain: "michi-online.firebaseapp.com",
   databaseURL: "https://michi-online-default-rtdb.firebaseio.com",
   projectId: "michi-online"
 });
 const db = firebase.database();
 
-/* 🔊 SONIDOS */
+/* SONIDOS */
 const soundX = new Audio("sonidos/jugadaX.mp3");
 const soundO = new Audio("sonidos/jugadaO.mp3");
 const soundWin = new Audio("sonidos/ganar.mp3");
 const soundTie = new Audio("sonidos/empate.mp3");
 
-/* VARIABLES */
+/* ELEMENTOS */
 const cells = document.querySelectorAll('.cell');
 const status = document.getElementById('status');
 const scoreboard = document.getElementById('scoreboard');
@@ -114,6 +126,7 @@ const joinRoom = document.getElementById('joinRoom');
 const roomCode = document.getElementById('roomCode');
 const copyCodeBtn = document.getElementById('copyCode');
 
+/* VARIABLES */
 let board = Array(9).fill('');
 let currentPlayer = 'X';
 let gameActive = false;
@@ -122,9 +135,11 @@ let online = false;
 let room = null;
 let mySymbol = null;
 
-/* Marcador */
+/* MARCADOR */
 let scoreX = 0, scoreO = 0, scoreTie = 0;
-function updateScore(){ scoreboard.textContent = `X: ${scoreX} | O: ${scoreO} | Empates: ${scoreTie}`; }
+function updateScore(){
+  scoreboard.textContent = `X: ${scoreX} | O: ${scoreO} | Empates: ${scoreTie}`;
+}
 
 /* GANADOR */
 function checkWinner(b){
@@ -137,46 +152,71 @@ function checkWinner(b){
 
 /* JUGADA */
 function playMove(i,p){
+  if(board[i] || !gameActive) return;
+
   board[i]=p;
+
   const cell = cells[i];
   cell.textContent=p;
   cell.classList.add('pop');
   setTimeout(()=>cell.classList.remove('pop'),200);
+
   const audio = (p==='X'?soundX:soundO);
-  audio.currentTime = 0; audio.play();
+  audio.currentTime=0;
+  audio.play();
 
   const r = checkWinner(board);
+
   if(r){
     gameActive=false;
+
     const audioEnd = (r==='tie'?soundTie:soundWin);
-    audioEnd.currentTime=0; audioEnd.play();
+    audioEnd.currentTime=0;
+    audioEnd.play();
+
     status.textContent = r==='tie'?'Empate':'Gana '+r;
 
-    if(r==='X') scoreX++; else if(r==='O') scoreO++; else scoreTie++;
+    if(r==='X') scoreX++;
+    else if(r==='O') scoreO++;
+    else scoreTie++;
+
     updateScore();
 
-    if(online) db.ref('rooms/'+room+'/winner').set(r);
-  } else {
-    currentPlayer = p==='X'?'O':'X';
-    status.textContent='Turno '+currentPlayer;
-    if(online) db.ref('rooms/'+room+'/currentPlayer').set(currentPlayer);
-  }
+    if(online){
+      db.ref('rooms/'+room).update({
+        board: board,
+        winner: r
+      });
+    }
 
-  if(vsMachine && gameActive) aiMove();
+  } else {
+
+    currentPlayer = p==='X'?'O':'X';
+
+    if(online){
+      db.ref('rooms/'+room).update({
+        board: board,
+        currentPlayer: currentPlayer
+      });
+    }
+
+    status.textContent='Turno '+currentPlayer;
+
+    if(vsMachine && gameActive) aiMove();
+  }
 }
 
-/* CLICK CELLS */
+/* CLICK */
 cells.forEach(c=>{
   c.onclick = e=>{
     if(!gameActive) return;
     if(online && currentPlayer!==mySymbol) return;
     const i = e.target.dataset.index;
-    if(board[i]) return;
     playMove(i,currentPlayer);
   }
 });
 
-/* ===== IA ===== */
+/* IA COMPLETA */
 function aiMove(){
   if(!vsMachine || currentPlayer!=='O' || !gameActive) return;
   let move;
@@ -186,78 +226,131 @@ function aiMove(){
   else move = bestMove();
   setTimeout(()=>playMove(move,'O'),400);
 }
-function randomMove(){ const e=board.map((v,i)=>v===''?i:null).filter(v=>v!==null); return e[Math.floor(Math.random()*e.length)]; }
-function bestMove(){
-  let best=-Infinity,m;
-  for(let i=0;i<9;i++){ if(board[i]===''){ board[i]='O'; let s=minimax(board,0,false); board[i]=''; if(s>best){best=s; m=i;} } }
-  return m;
-}
-function minimax(b,d,isMax){
-  const r = checkWinner(b);
-  if(r==='O') return 10-d; if(r==='X') return d-10; if(r==='tie') return 0;
-  if(isMax){ let best=-Infinity; for(let i=0;i<9;i++){ if(b[i]===''){b[i]='O'; best=Math.max(best,minimax(b,d+1,false)); b[i]='';} } return best; }
-  else{ let best=Infinity; for(let i=0;i<9;i++){ if(b[i]===''){b[i]='X'; best=Math.min(best,minimax(b,d+1,true)); b[i]='';} } return best; }
+
+function randomMove(){
+  const e=board.map((v,i)=>v===''?i:null).filter(v=>v!==null);
+  return e[Math.floor(Math.random()*e.length)];
 }
 
-/* ===== ONLINE ===== */
+function bestMove(){
+  let best=-Infinity,m;
+  for(let i=0;i<9;i++){
+    if(board[i]===''){
+      board[i]='O';
+      let s=minimax(board,0,false);
+      board[i]='';
+      if(s>best){best=s; m=i;}
+    }
+  }
+  return m;
+}
+
+function minimax(b,d,isMax){
+  const r = checkWinner(b);
+  if(r==='O') return 10-d;
+  if(r==='X') return d-10;
+  if(r==='tie') return 0;
+
+  if(isMax){
+    let best=-Infinity;
+    for(let i=0;i<9;i++){
+      if(b[i]===''){
+        b[i]='O';
+        best=Math.max(best,minimax(b,d+1,false));
+        b[i]='';
+      }
+    }
+    return best;
+  } else {
+    let best=Infinity;
+    for(let i=0;i<9;i++){
+      if(b[i]===''){
+        b[i]='X';
+        best=Math.min(best,minimax(b,d+1,true));
+        b[i]='';
+      }
+    }
+    return best;
+  }
+}
+
+/* ONLINE */
 function code(){ return Math.random().toString(36).substr(2,4).toUpperCase(); }
 
 vsOnlineBtn.onclick = ()=>{
   resetGame();
-  online = true;
-  gameActive = true;
-  status.textContent = 'Online: crea o únete';
+  online=true;
+  gameActive=true;
+  status.textContent='Online: crea o únete';
 };
 
-/* CREAR SALA */
 createRoom.onclick = ()=>{
   room = code();
-  mySymbol = 'X';
-  db.ref('rooms/'+room).set({board,currentPlayer:'X',winner:null,players:{X:true}});
+  mySymbol='X';
+  db.ref('rooms/'+room).set({
+    board: board,
+    currentPlayer:'X',
+    winner:null,
+    players:{X:true}
+  });
   listen();
-  status.textContent = 'Sala ' + room + ' (X)';
-  roomCode.value = room;
+  status.textContent='Sala '+room+' (X)';
+  roomCode.value=room;
 };
 
-/* UNIRSE SALA */
 joinRoom.onclick = ()=>{
   room = roomCode.value.trim().toUpperCase();
   if(!room) return alert('Código inválido');
-  mySymbol = 'O';
-  db.ref('rooms/'+room+'/players/O').set(true); // marca que O está conectado
+  mySymbol='O';
+  db.ref('rooms/'+room+'/players/O').set(true);
   listen();
-  status.textContent = 'Unido a ' + room + ' (O)';
+  status.textContent='Unido a '+room+' (O)';
 };
 
-/* COPIAR CÓDIGO */
 copyCodeBtn.onclick = ()=>{
   if(!room) return alert('No hay sala activa');
-  navigator.clipboard.writeText(room).then(()=>alert('Código copiado: '+room));
+  navigator.clipboard.writeText(room);
 };
 
-/* ESCUCHAR CAMBIOS EN FIREBASE */
 function listen(){
   db.ref('rooms/'+room).on('value',snap=>{
     if(!snap.val()) return;
+
     board = snap.val().board;
     currentPlayer = snap.val().currentPlayer;
-    const winner = snap.val().winner || null;
-    cells.forEach((c,i)=>c.textContent = board[i]);
-    if(winner) gameActive=false;
-    status.textContent = winner ? (winner==='tie'?'Empate':'Gana '+winner) : 
-      (currentPlayer===mySymbol?'Tu turno':'Esperando al otro jugador...');
+    const winner = snap.val().winner;
+
+    cells.forEach((c,i)=>c.textContent=board[i]);
+
+    if(winner){
+      gameActive=false;
+      status.textContent = winner==='tie'?'Empate':'Gana '+winner;
+      return;
+    }
+
+    if(currentPlayer===mySymbol){
+      status.textContent='Tu turno';
+    } else {
+      status.textContent='Esperando al otro jugador...';
+    }
   });
 }
 
 /* CONTROLES */
 vsMachineBtn.onclick = ()=>{
   resetGame();
-  vsMachine = true;
-  gameActive = true;
+  vsMachine=true;
+  gameActive=true;
   difficultySelect.style.display='inline';
   status.textContent='Turno X';
 };
-vsFriendBtn.onclick = ()=>{ resetGame(); gameActive=true; status.textContent='Turno X'; };
+
+vsFriendBtn.onclick = ()=>{
+  resetGame();
+  gameActive=true;
+  status.textContent='Turno X';
+};
+
 resetBtn.onclick = resetGame;
 
 function resetGame(){
