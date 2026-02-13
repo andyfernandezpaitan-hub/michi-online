@@ -304,13 +304,20 @@ joinRoom.onclick = ()=>{
   if(!room) return alert('Código inválido');
   mySymbol='O';
   db.ref('rooms/'+room).once('value', snap => {
-    if(!snap.val()) return alert('Sala no existe');
+    if(!snap.val()) {
+      alert('Sala no existe');
+      return;
+    }
     const data = snap.val();
-    if(data.players && data.players.O) return alert('Sala llena');
+    if(data.players && data.players.O) {
+      alert('Sala llena');
+      return;
+    }
+    // Si pasa validación, únete
     db.ref('rooms/'+room+'/players/O').set(true);
+    listen();
+    status.textContent='Unido a '+room+' (O)';
   });
-  listen();
-  status.textContent='Unido a '+room+' (O)';
 };
 
 copyCodeBtn.onclick = ()=>{
